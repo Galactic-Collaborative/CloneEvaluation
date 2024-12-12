@@ -14,6 +14,8 @@ import java.util.Arrays;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.Set;
+import java.util.HashSet;
 
 import cloneMatchingAlgorithms.CloneMatcher;
 import cloneMatchingAlgorithms.CoverageMatcher;
@@ -67,238 +69,45 @@ public class EvaluateTool implements Callable<Void> {
         new CommandLine(new EvaluateTool()).execute(args);
     }
 
-    public Void call() {
-        try {
-            Tool tool = Tools.getTool(toolId.id);
-            if (tool == null) {
-                panic(-1, null, "There is no such tool with ID " + toolId.id + ".");
-                return null;
-            }
-
-            CloneMatcher matcher;
-            String[] parts = matcherSpec.split("\\s+", 2);
-            try {
-                matcher = CloneMatcher.load(tool.getId(), parts[0], parts[1]);
-            } catch (ClassNotFoundException | NoSuchMethodException | SecurityException | InstantiationException
-                    | IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-                panic(-1, e, "Error loading clone matcher.  Please see the exception for details:");
-                return null;
-            }
-
-            ToolEvaluator te;
-            te = new ToolEvaluator(
-                    /*tool_id*/ tool.getId(),
-                    /*matcher*/ matcher,
-                    /*similarity_type*/ options.simtype.val,
-                    /*min_size*/ options.lines.min,
-                    /*max_size*/ options.lines.max,
-                    /*min_pretty_size*/options.pretty.min,
-                    /*max_pretty_size*/options.pretty.max,
-                    /*min_tokens*/ options.tokens.min,
-                    /*max_tokens*/ options.tokens.max,
-                    /*min_judges*/ options.minjudges,
-                    /*min_confidence*/ options.minconfidence,
-                    /*include_internal*/ false);
-
-            try {
-                PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter(output.file)));
-                long time = System.currentTimeMillis();
-                EvaluateTool.writeReport(pw, tool, te, options.minsim);
-                pw.flush();
-                pw.close();
-                time = System.currentTimeMillis() - time;
-                System.err.println("\tElapsed Time: " + time / 1000.0 + "s");
-            } catch (IOException e) {
-                panic(-1, e, "IOException while writing output file. See exception:");
-            }
-
-        } catch (SQLException e) {
-            panic(-1, e, "There is some error with the database. Try a new copy of the database, or report the error:");
+    public Void call() throws SQLException, IOException, ClassNotFoundException, NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
+        Tool tool = Tools.getTool(toolId.id);
+        if (tool == null) {
+            panic(-1, null, "There is no such tool with ID " + toolId.id + ".");
+            return null;
         }
+
+        CloneMatcher matcher;
+        String[] parts = matcherSpec.split("\\s+", 2);
+        matcher = CloneMatcher.load(tool.getId(), parts[0], parts[1]);
+
+        System.out.println("Evaluating...");
+
+        ToolEvaluator te;
+        te = new ToolEvaluator(
+                /*tool_id*/ tool.getId(),
+                /*matcher*/ matcher,
+                /*similarity_type*/ options.simtype.val,
+                /*min_size*/ options.lines.min,
+                /*max_size*/ options.lines.max,
+                /*min_pretty_size*/options.pretty.min,
+                /*max_pretty_size*/options.pretty.max,
+                /*min_tokens*/ options.tokens.min,
+                /*max_tokens*/ options.tokens.max,
+                /*min_judges*/ options.minjudges,
+                /*min_confidence*/ options.minconfidence,
+                /*include_internal*/ false);
+
+        PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter(output.file)));
+        long time = System.currentTimeMillis();
+        System.out.println("Writing report to " + output.file + "...");
+        EvaluateTool.writeReport(pw, tool, te, options.minsim);
+        pw.flush();
+        pw.close();
+        time = System.currentTimeMillis() - time;
+        System.err.println("\tElapsed Time: " + time / 1000.0 + "s");
+
         return null;
     }
-
-//	public static void interactive() {
-//		Thread canceled = new Thread() {
-//			public void run() {
-//				System.out.println();
-//				System.out.println();
-//				System.out.println("    Tool evaluation canceled.");
-//				System.out.println();
-//				System.out.println(":::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::");
-//			}
-//		};
-//		Runtime.getRuntime().addShutdownHook(canceled);
-//		
-//		Scanner scanner = new Scanner(System.in);
-//		String inline;
-//		
-//		long id;
-//		Integer min_lines;
-//		Integer max_lines;
-//		Integer min_tokens;
-//		Integer max_tokens;
-//		Integer min_pretty;
-//		Integer max_pretty;
-//		Integer min_judges;
-//		Integer min_confidence;
-//		
-//		int  min_similarity;
-//		int similarity_type;
-//		Path outfile;
-//		CloneMatcher matcher;
-//		
-//		try {
-//			System.out.println(":::::::::::::::::::::::: BigCloneBench - Evaluate Tool ::::::::::::::::::::::::");
-//			System.out.println(" Specify the tool to evaluate, configure the evaluation configuration, and a");
-//			System.out.println(" file to save the evaluation to.");
-//			System.out.println(" Use CTRL-C to cancel.");
-//	
-//	// Get Tool ID
-//			System.out.println();
-//			System.out.println("Specify the tool to evaluate.");
-//			System.out.println();
-//			id = getToolID(scanner);
-//			
-//	// Get File
-//			System.out.println();
-//			System.out.println("Specify the file to write the evaluation resuls to.");
-//			System.out.println();
-//			outfile = getOutputPath(scanner);
-//			
-//	// Setup Clone Selection
-//			System.out.println();
-//			System.out.println("Specify the constraints on the selected reference clones for evaluation.");
-//			System.out.println("This defines the clones selected for evaluation.");
-//			System.out.println();
-//			similarity_type = getSimilarityType(scanner);
-//			System.out.println();
-//			min_lines = getInteger(" Minimum Clone Size in Lines (or blank for none): ", scanner);
-//			System.out.println();
-//			max_lines = getInteger(" Maximum Clone Size in Lines (or blank for none): ", scanner);
-//			System.out.println();
-//			min_pretty = getInteger(" Minimum Clone Size in Pretty-Printed Lines (or blank for none): ", scanner);
-//			System.out.println();
-//			max_pretty = getInteger(" Maximum Clone Size in Pretty-Printed Lines (or blank for none): ", scanner);
-//			System.out.println();
-//			min_tokens = getInteger(" Minimum Clone Size in Tokens (or blank for none): ", scanner);
-//			System.out.println();
-//			max_tokens = getInteger(" Maximum Clone Size in Tokens (or blank for none): ", scanner);
-//			System.out.println();
-////			min_judges = getInteger(" Minimum Number of Judges (or blank for none): ", scanner);
-////			System.out.println();
-////			min_confidence = getInteger(" Minimum Clone Confidence (or blank for none): ", scanner);
-//			min_judges = null;
-//			min_confidence = null;
-//			
-//	// Setup Clone Matcher
-//			System.out.println();
-//			System.out.println("Select and setup the clone matching algorithm.");
-//			System.out.println("This determines how recall is measured.");
-//			System.out.println();
-//			matcher = setupCloneMatcher(scanner, id);
-//			
-//			
-//	// How low to evaluate
-//			System.out.println();
-//			System.out.println("Specify the minimum clone similarity to measure recall for.  Setting to 0");
-//			System.out.println("will evaluate for all clones, but evaluation can be very time-consuming.");
-//			System.out.println("Setting slightly below the expected capabilities of the tool can save");
-//			System.out.println("significant evaluation time.");
-//			while(true) {
-//				System.out.println();
-//				System.out.print  (" Minimum clone similarity [0-100, increment of 5]: ");
-//				inline = scanner.nextLine();
-//				
-//				try {
-//					min_similarity = Integer.parseInt(inline);
-//				} catch (NumberFormatException e) {
-//					System.out.println("    Invalid value.");
-//					continue;
-//				}
-//				
-//				if(min_similarity < 0 || min_similarity > 100) {
-//					System.out.println("    Value is out of range.");
-//					continue;
-//				}
-//				
-//				if(min_similarity % 5 != 0) {
-//					System.out.println("    Value needs to be a multiple of 5.");
-//					continue;
-//				}
-//				break;
-//			}
-//			
-//			System.out.println();
-//			System.out.println("Evaluation has begun.  This may take some time!");
-//			System.out.println();
-//			
-////			while(true) {
-////				System.out.println();
-////				System.out.println("Specify partial or full evaluation.  Partial considers only clones with >= 50%.");
-////				System.out.println("If you don't expect your tool to have recall below 50% syntactical similarity");
-////				System.out.println("then this is a significant evaluation speedup.");
-////				System.out.println("");
-////				System.out.print  (" Full or partial evaluation [partial/full]: ");
-////				inline = scanner.nextLine();
-////				if(inline.toLowerCase().equals("partial")) {
-////					full = false;
-////				} else if (inline.toLowerCase().equals("full")) {
-////					full = true;
-////				} else {
-////					System.out.println("    Invalid selection.");
-////					continue;
-////				}
-////				break;
-////			}
-//			
-//			ToolEvaluator te;
-//			te = new ToolEvaluator(
-//		                     /*tool_id*/ id,
-//		                     /*matcher*/ matcher,
-//		             /*similarity_type*/ similarity_type,
-//		                    /*min_size*/ min_lines,
-//		 	                /*max_size*/ max_lines,
-//		 	         /*min_pretty_size*/ min_pretty,
-//		 	         /*max_pretty_size*/ max_pretty,
-//		 	              /*min_tokens*/ min_tokens,
-//		 	              /*max_tokens*/ max_tokens,
-//		 	              /*min_judges*/ min_judges,
-//		 	       	  /*min_confidence*/ min_confidence,
-//		 	   		/*include_internal*/ false);
-//			
-//			PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter(outfile.toFile())));
-//			
-//			//long id;
-//			//Integer min_lines;
-//			//Integer max_lines;
-//			//Integer min_tokens;
-//			//Integer max_tokens;
-//			//Integer min_pretty;
-//			//Integer max_pretty;
-//			//Integer min_judges;
-//			//Integer min_confidence;
-//			//int  min_similarity;
-//			//int similarity_type;
-//			//Path outfile;
-//			//IsDetected matcher;
-//			
-//			Tool tool = Tools.getTool(id);
-//			
-//			long time = System.currentTimeMillis();
-//			EvaluateTool.writeReport(pw, tool, te, min_similarity);
-//			time = System.currentTimeMillis() - time;
-//			System.err.println("\tElapsed Time: " + time/1000.0 + "s");
-//			
-//			Runtime.getRuntime().removeShutdownHook(canceled);
-//			System.out.println();
-//			System.out.println(":::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::");
-//		} catch (SQLException e) {
-//			
-//		} catch (IOException e) {
-//			
-//		}
-//	}
 
     public static void writeReport(PrintWriter pw, Tool tool, ToolEvaluator te, int min_similarity) throws SQLException {
 
@@ -442,7 +251,12 @@ public class EvaluateTool implements Callable<Void> {
         pw.println();
         pw.flush();
 
-        for(long fid : Functionalities.getFunctionalityIds()) {
+        // Set<Long> fids = Functionalities.getFunctionalityIds();
+        Set<Long> fids = new HashSet<Long>();
+        fids.add(6L);
+
+        for(long fid : fids) {
+            System.out.println("Evaluating functionality " + fid + "...");
             Functionality f = Functionalities.getFunctinality(fid);
             pw.println("================================================================================");
             pw.println("Functionality");
@@ -547,176 +361,5 @@ public class EvaluateTool implements Callable<Void> {
         }
 
     }
-
-//	private static CloneMatcher setupCloneMatcher(Scanner scanner, long id) throws SQLException {
-//		CloneMatcher retval;
-//		while(true) {
-//			System.out.println(" Select a clone matcher:");
-//			System.out.println("-------------------------------------------------------------------------------");
-//			System.out.println("    [1] - Coverage - For a reference clone pair to be considered detected, the");
-//			System.out.println("                     tool must report a clone pair that covers a given ratio of");
-//			System.out.println("                     the reference clone pair.  An optional ratio can be");
-//			System.out.println("                     specified as the minimum ratio of the detected clone (in");
-//			System.out.println("                     lines) that must be from the reference clone.");
-//			System.out.println();
-//			System.out.println("    [[ Additional clone matchers to be added. ]]");
-//			//System.out.println("                     optional maximimum number of lines the detected clone can");
-//			//System.out.println("                     contain that are external to the reference clone.");
-//			System.out.println("-------------------------------------------------------------------------------");
-//			System.out.print  (":::: ");
-//			
-//			String inline = scanner.nextLine();
-//			if(inline.equals("1")) {
-//				// Get Coverage
-//				double coverage;
-//				while(true) {
-//					System.out.println("");
-//					System.out.print  (" Specify coverage in range [0.0,1.0]: ");
-//					inline = scanner.nextLine();
-//					try {
-//						coverage = Double.parseDouble(inline);
-//					} catch (NumberFormatException e) {
-//						System.out.println("    Invalid value.");
-//						continue;
-//					}
-//					if(coverage < 0 || coverage > 1) {
-//						System.out.println("    Value out of range.");
-//						continue;
-//					}
-//					break;
-//				}
-//				
-//				// Get Tolerence
-//				Double tolerence;
-//				while(true) {
-//					System.out.println("");
-//					System.out.print  (" Specify minimum ratio is reference clone (or blank to omit) in range [0.0,1.0]: ");
-//					inline = scanner.nextLine();
-//					if(inline.equals("")) {
-//						tolerence = null;
-//						break;
-//					}
-//					try {
-//						tolerence = Double.parseDouble(inline);
-//					} catch (NumberFormatException e) {
-//						System.out.println("    Invalid value.");
-//						continue;
-//					}
-//					if(tolerence < 0 || tolerence > 1) {
-//						System.out.println("    Value out of range.");
-//						continue;
-//					}
-//					break;
-//				}
-//				
-//				retval = new CoverageMatcher(id, coverage, null, tolerence);
-//				break;
-//			} else {
-//				System.out.println("    Invalid selection.");
-//				System.out.println();
-//				continue;
-//			}
-//		}
-//		
-//		return retval;
-//	}
-//	
-//	private static int getSimilarityType(Scanner scanner) {
-//		while(true) {
-//			System.out.print(" How should reference clone similarity be measured? (both/line/token/avg): ");
-//			String inline = scanner.nextLine();
-//			if(inline.toLowerCase().equals("token")) {
-//				return ToolEvaluator.SIMILARITY_TYPE_TOKEN;
-//			} else if (inline.toLowerCase().equals("line")) {
-//				return ToolEvaluator.SIMILARITY_TYPE_LINE;
-//			} else if (inline.toLowerCase().equals("both")) {
-//				return ToolEvaluator.SIMILARITY_TYPE_BOTH;
-//			} else if (inline.toLowerCase().equals("avg")) {
-//				return ToolEvaluator.SIMILARITY_TYPE_AVG;
-//			} else {
-//				System.out.println("    Invalid selection.");
-//			}
-//		}
-//	}
-//
-//	private static Path getOutputPath(Scanner scanner) {
-//		Path outfile;
-//		
-//		while(true) {
-//			System.out.print  (" Output File: ");
-//			String inline = scanner.nextLine();
-//			
-//			try {
-//				outfile = Paths.get(inline);
-//			} catch (InvalidPathException e) {
-//				System.out.println("    Invalid path.");
-//				continue;
-//			}
-//			
-//			if(Files.exists(outfile)) {
-//				System.out.println("    This file already exists.  Please delete it or specify a new file.");
-//				continue;
-//			}
-//			
-//			try {
-//				Files.createFile(outfile);
-//			} catch (IOException e) {
-//				System.out.println("    Failed to create the output file.  Do you have permission?");
-//				continue;
-//			}
-//			
-//			break;
-//		}
-//		
-//		return outfile;
-//	}
-//	
-//	private static Integer getInteger(String query, Scanner scanner) {
-//		Integer in;
-//		String inline;
-//		
-//		while(true) {
-//			System.out.print(query);
-//			inline = scanner.nextLine();
-//			if(inline.equals("")) {
-//				in = null;
-//			} else {
-//				try {
-//					in = Integer.parseInt(inline);
-//				} catch (NumberFormatException e) {
-//					System.out.println("    Invalid value.");
-//					System.out.println();
-//					continue;
-//				}
-//			}
-//			break;
-//		}
-//		return in;
-//	}
-//	
-//	public static Long getToolID(Scanner scanner) throws SQLException {
-//		long id;
-//		String inline;
-//		while(true) {
-//			System.out.println();
-//			System.out.print(" Tool ID: ");
-//			inline = scanner.nextLine();
-//			try {
-//				id = Long.parseLong(inline);
-//			} catch (NumberFormatException e) {
-//				System.out.println("    Invalid ID value.");
-//				continue;
-//			}
-//			Tool tool = Tools.getTool(id);
-//			if(tool == null) {
-//				System.out.println("    No tool exists with this ID.");
-//				continue;
-//			}
-//			return id;
-//		}
-//	}
-
-    // Output Dataset Stats (based on selection)
-    // Output full statistics
 
 }

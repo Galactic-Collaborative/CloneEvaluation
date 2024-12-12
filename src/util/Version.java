@@ -3,7 +3,7 @@ package util;
 import picocli.CommandLine;
 
 public class Version implements CommandLine.IVersionProvider {
-    public static final String version = "%%VERSION%%";
+    public static final String version = "Dekker";
 
     @Override
     public String[] getVersion() {
